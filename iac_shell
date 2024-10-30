@@ -1,0 +1,25 @@
+#!/bin/bash
+ 
+AMI_ID="ami-0084a47cc718c111a"
+INSTANCE_TYPE="t2.medium"
+KEY_NAME="jb"
+SECURITY_GROUP_ID="sg-0990ccbf614dd262e"
+SUBNET_ID="subnet-0f3992ae46877737a"
+TAG_NAME="RandomSong-m1"
+nbr_instances=2
+ 
+running_instances=$(aws ec2 run-instances \
+    --image-id "ami-0084a47cc718c111a" \
+    --instance-type $INSTANCE_TYPE \
+    --key-name $KEY_NAME \
+    --security-group-ids "$SECURITY_GROUP_ID" \
+    --subnet-id $SUBNET_ID \
+    --tag-specifications "ResourceType=instance,Tags=[{Key=Name,Value=$TAG_NAME}]" \
+    --query "Instances[0].InstanceId" \
+    --output text)
+ 
+for (( i=0; i<= $nbr_instances; i++))
+do
+        $running_instances
+        echo "Running instance $1"
+done

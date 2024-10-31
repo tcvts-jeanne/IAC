@@ -1,60 +1,31 @@
-
 #!/bin/bash
- 
+
 AMI_ID="ami-0084a47cc718c111a"
-
 INSTANCE_TYPE="t2.medium"
-
 KEY_NAME="jb"
-
 SECURITY_GROUP_ID="sg-0990ccbf614dd262e"
-
 SUBNET_ID="subnet-0f3992ae46877737a"
  
-# Array of instance names
-
 instanceNames=("nabil-m1" "nabil-m2" "nabil-DB")
- 
-# Loop through the instance names and create EC2 instances
 
 for instanceName in "${instanceNames[@]}"; do
-
-    # Create an EC2 instance using the AWS CLI
-
     INSTANCE_ID=$(aws ec2 run-instances \
-
         --image-id "$AMI_ID" \
-
         --instance-type "$INSTANCE_TYPE" \
-
         --key-name "$KEY_NAME" \
-
         --security-group-ids "$SECURITY_GROUP_ID" \
-
         --subnet-id "$SUBNET_ID" \
-
         --tag-specifications "ResourceType=instance,Tags=[{Key=Name,Value=${instanceName}}]" \
-
         --query 'Instances[0].InstanceId' \
-
         --output text)
  
-    # Wait for the instance to be in running state
-
     aws ec2 wait instance-running --instance-ids "$INSTANCE_ID"
  
-    # Get the public IP address of the newly created instance
-
     PUBLIC_IP=$(aws ec2 describe-instances \
-
         --instance-ids "$INSTANCE_ID" \
-
         --query 'Reservations[0].Instances[0].PublicIpAddress' \
-
         --output text)
  
-    # Output the instance name, ID, and public IP address
-
     echo "$PUBLIC_IP"
 
 done

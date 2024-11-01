@@ -1,0 +1,111 @@
+pipeline {
+    agent any
+    stages {
+        stage('Create AWS EC2 Instances') {
+            steps {
+                script {
+                    // Run the shell script and capture the output
+                    def output = sh(script: """
+                        chmod +x iac_shell
+                        bash ./iac_shell                            
+                    """, returnStdout: true).trim()
+
+                    // Split the output into a list of IP addresses
+                    def ipAddresses = output.split('\n')
+                    
+                    // Store the IP addresses in environment variables
+                    env.INSTANCE_IP_1 = ipAddresses[0]
+                    env.INSTANCE_IP_2 = ipAddresses[1]
+                    env.INSTANCE_IP_3 = ipAddresses[2]
+
+                    // Optional: Print the IP addresses for verification
+                    echo "Instance IP 1: ${env.INSTANCE_IP_1}"
+                    echo "Instance IP 2: ${env.INSTANCE_IP_2}"
+                    echo "Instance IP 3: ${env.INSTANCE_IP_3}"
+                }
+            }
+        } 
+
+        stage('Clone GitHub') {
+            steps {
+                script {
+                    git branch: 'main', url: 'https://github.com/hussTech44/IAC.git'
+                }
+            }
+        }
+
+        stage('Deploy Database on VM') {
+            steps {
+                script {
+                    // SSH command to run on the remote VM
+                    def remoteHost = 'ec2-${env.INSTANCE_IP_3}.eu-central-1.compute.amazonaws.com'
+                    def sshKeyPath = '/var/lib/jenkins/danakey.pem'
+ 
+                    // Pull Docker image, stop and remove any existing container, and run the new container on the VM
+                    sh """
+                        ssh -o StrictHostKeyChecking=no -i ${sshKeyPath} ubuntu@${remoteHost} '
+                            docker pull mysql:latest &&
+                            if [ \$(docker ps -q -f name=my-mysql-db) ]; then
+                                docker stop my-mysql-db &&
+                                docker rm my-mysql-db
+                            fi &&
+                            docker run --name my-mysql-db -e MYSQL_ROOT_PASSWORD=rootpass -d -p 3306:3306 mysql:latest
+                            sleep 30
+                        '
+                    """
+                }
+            }
+        }
+        stage('Run Shell Script to Modify Database') {
+            steps {
+                script {
+                    // Execute the shell script to create the table and insert data
+                    sh '/var/lib/jenkins/workspace/shell3.sh ec2-${env.INSTANCE_IP_3}.eu-central-1.compute.amazonaws.com'
+                }
+            }
+        }
+        stage('Clone Website') {
+            steps {
+                script {
+                    // Clone the GitHub repository
+                    git branch: 'main', url: 'https://github.com/hussTech44/Songs_Website.git'
+                }
+            }
+        }
+        stage('Send Website to Another Machine') {
+            steps {
+                script {
+                    // SCP command to send the cloned repository to another machine
+                    def destinationHost = 'ec2-${env.INSTANCE_IP_1}.eu-central-1.compute.amazonaws.com'
+                    def destinationPath = '/home/ubuntu/'
+                    def sshKeyPath = '/var/lib/jenkins/danakey.pem'
+ 
+                    // Use SCP to copy the repository to the destination machine
+                    sh """
+                        scp -o StrictHostKeyChecking=no -i ${sshKeyPath} -r /var/lib/jenkins/workspace/Pipelline ubuntu@${destinationHost}:${destinationPath}
+                    """
+                }
+            }
+        }
+        stage('Install Dependencies and Start Servers') {
+            steps {
+                script {
+                    def destinationHost = 'ec2-${env.INSTANCE_IP_1}.eu-central-1.compute.amazonaws.com'
+                    def sshKeyPath = '/var/lib/jenkins/danakey.pem'
+ 
+                    // SSH into the machine and run the installation commands
+                    sh """
+                        ssh -o StrictHostKeyChecking=no -i ${sshKeyPath} ubuntu@${destinationHost} ' 
+                            cd ~/Pipelline/backend && 
+                            npm install express mysql2 dotenv cors && 
+                            tmux new-session -d -s backend_session "npm start";
+                            cd ~/Pipelline/frontend && 
+                            npm install http-server && 
+                            tmux new-session -d -s frontend_session "npm start"
+                        '
+                    """
+                }
+            }
+        }
+    }
+}
